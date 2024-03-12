@@ -3012,7 +3012,7 @@ class Trainer:
         model = self.model
         model.to("cpu")
 
-        if xm.is_master_ordinal():
+        if xm.is_master_ordinal() and self.args.save_args:
             os.makedirs(output_dir, exist_ok=True)
             torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
@@ -3030,8 +3030,16 @@ class Trainer:
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = model.state_dict()
-                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                # state_dict = model.state_dict()
+                # xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                # Im doing my part
+                unwrap_model(model).save_pretrained(
+                    output_dir,
+                    is_main_process=self.args.should_save,
+                    state_dict=model.state_dict(),
+                    save_function=xm.save,
+                    safe_serialization=self.args.save_safetensors,
+                )
         else:
             model.save_pretrained(
                 output_dir,
@@ -3819,7 +3827,7 @@ class Trainer:
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
 
-    def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
+    def push_to_hub(self, commit_message: Optional[str] = "End of training", create_model_card=True, save_model_internal=True, blocking: bool = True, **kwargs) -> str:
         """
         Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
@@ -3846,9 +3854,10 @@ class Trainer:
         if self.hub_model_id is None:
             self.init_hf_repo()
 
-        # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
-        # self.args.should_save.
-        self.save_model(_internal_call=True)
+        if save_model_internal:
+            # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
+            # self.args.should_save.
+            self.save_model(_internal_call=True)
 
         # Only push from one node.
         if not self.is_world_process_zero():
@@ -3869,7 +3878,8 @@ class Trainer:
                 if model_tag not in kwargs["tags"]:
                     kwargs["tags"].append(model_tag)
 
-        self.create_model_card(model_name=model_name, **kwargs)
+        if create_model_card:
+            self.create_model_card(model_name=model_name, **kwargs)
 
         # Wait for the current upload to be finished.
         self._finish_current_push()

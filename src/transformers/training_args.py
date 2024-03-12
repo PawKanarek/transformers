@@ -1353,6 +1353,10 @@ class TrainingArguments:
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
         },
     )
+    
+    save_args: Optional[bool] = field(
+        default=False, metadata={"help": "Wheter or not save the args in final model."}
+    )
 
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
