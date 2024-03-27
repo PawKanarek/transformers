@@ -39,16 +39,32 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
 def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
-    # Check we're not importing a "pkg_name" directory somewhere but the actual library by trying to grab the version
+    # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
     if package_exists:
         try:
+            # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
-            package_exists = True
         except importlib.metadata.PackageNotFoundError:
-            package_exists = False
-        logger.debug(f"Detected {pkg_name} version {package_version}")
+            # Fallback method: Only for "torch" and versions containing "dev"
+            if pkg_name == "torch":
+                try:
+                    package = importlib.import_module(pkg_name)
+                    temp_version = getattr(package, "__version__", "N/A")
+                    # Check if the version contains "dev"
+                    if "dev" in temp_version:
+                        package_version = temp_version
+                        package_exists = True
+                    else:
+                        package_exists = False
+                except ImportError:
+                    # If the package can't be imported, it's not available
+                    package_exists = False
+            else:
+                # For packages other than "torch", don't attempt the fallback and set as not available
+                package_exists = False
+        logger.debug(f"Detected {pkg_name} version: {package_version}")
     if return_version:
         return package_exists, package_version
     else:
@@ -78,7 +94,9 @@ FSDP_MIN_VERSION = "1.12.0"
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
+_galore_torch_available = _is_package_available("galore_torch")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -115,6 +133,7 @@ _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
+_quanto_available = _is_package_available("quanto")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -290,6 +309,10 @@ def is_torch_sdpa_available():
 
 def is_torchvision_available():
     return _torchvision_available
+
+
+def is_galore_torch_available():
+    return _galore_torch_available
 
 
 def is_pyctcdecode_available():
@@ -634,6 +657,10 @@ def is_aqlm_available():
     return _aqlm_available
 
 
+def is_av_available():
+    return _av_available
+
+
 def is_ninja_available():
     r"""
     Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
@@ -770,6 +797,10 @@ def is_optimum_available():
 
 def is_auto_awq_available():
     return _auto_awq_available
+
+
+def is_quanto_available():
+    return _quanto_available
 
 
 def is_auto_gptq_available():
@@ -984,6 +1015,16 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+# docstyle-ignore
+AV_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install av
+```
+Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -1310,6 +1351,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
