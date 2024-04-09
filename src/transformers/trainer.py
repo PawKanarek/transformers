@@ -812,6 +812,9 @@ class Trainer:
         if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
+        if self.args.sequential_data_sampler:
+            return SequentialSampler(self.train_dataset)
+
         # Build the sampler.
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
