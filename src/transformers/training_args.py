@@ -1036,6 +1036,8 @@ class TrainingArguments:
             )
         },
     )
+
+    sequential_data_sampler: Optional[bool] = field(default=False, metadata={"help": "Whether to load data using SequientialDataSampler"})
     dataloader_num_workers: int = field(
         default=0,
         metadata={
